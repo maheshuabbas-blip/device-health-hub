@@ -4,6 +4,7 @@ import {
   fetchInactiveDevices,
   fetchNoAppFound,
   fetchDeviceHistory,
+  groupDeviceRecords,
   SummaryResponse,
   InactiveDevicesResponse,
   NoAppFoundResponse,
@@ -25,9 +26,16 @@ export function useInactiveDevices(
   date: string,
   options?: { platform?: string; limit?: number }
 ) {
-  return useQuery<InactiveDevicesResponse>({
+  return useQuery({
     queryKey: ['inactive-devices', date, options?.platform, options?.limit],
-    queryFn: () => fetchInactiveDevices(date, options),
+    queryFn: async () => {
+      const response = await fetchInactiveDevices(date, options);
+      // Transform raw data into grouped devices for UI
+      return {
+        date: response.date,
+        devices: groupDeviceRecords(response.data),
+      };
+    },
     staleTime: 30 * 1000,
     retry: 2,
   });
