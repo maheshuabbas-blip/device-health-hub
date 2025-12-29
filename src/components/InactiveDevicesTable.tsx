@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { InactiveDevice } from '@/lib/mockData';
+import { InactiveDevice } from '@/lib/api';
 import { PlatformBadge } from './PlatformIcon';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
