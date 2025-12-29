@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { AccountStatus } from "@/lib/mockData";
+import { AccountStatus } from "@/lib/api";
 
 interface StatusBadgeProps {
   status: AccountStatus;
