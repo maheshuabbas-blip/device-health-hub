@@ -1,13 +1,14 @@
 // API client for Device Account Status Monitoring
 
-const API_BASE_URL = 'http://192.168.20.86:8000/api';
+const API_BASE_URL = 'http://192.168.20.86:8000';
 
 export type AccountStatus = 'active' | 'inactive' | 'error';
 
 export interface SummaryItem {
   platform: string;
-  account_status: AccountStatus;
-  count: number;
+  active: number;
+  inactive: number;
+  error?: number; // Optional, defaults to 0 if not present
 }
 
 export interface SummaryResponse {
@@ -23,21 +24,21 @@ export interface InactiveDevice {
 
 export interface InactiveDevicesResponse {
   date: string;
-  devices: InactiveDevice[];
+  filters: {
+    platform: string | null;
+    device_id: string | null;
+  };
+  inactive_count: number;
+  data: DeviceRecord[];
 }
 
 export interface DeviceRecord {
   device_id: string;
   platform: string;
-  account_status: AccountStatus;
+  account_status: AccountStatus | ''; // Can be empty string in some responses
   reason?: string;
   date: string;
-}
-
-export interface InactiveRecordsResponse {
-  date: string;
-  inactive_count: number;
-  data: DeviceRecord[];
+  created_at?: string; // ISO timestamp when the record was created
 }
 
 export interface NoAppDevice {
@@ -67,7 +68,7 @@ export interface DeviceHistoryDateResponse {
 export async function fetchSummary(date: string, platform?: string): Promise<SummaryResponse> {
   const url = new URL(`${API_BASE_URL}/summary/${date}`);
   if (platform) url.searchParams.set('platform', platform);
-  
+
   const response = await fetch(url.toString());
   if (!response.ok) {
     throw new Error(`Failed to fetch summary: ${response.statusText}`);
@@ -75,35 +76,19 @@ export async function fetchSummary(date: string, platform?: string): Promise<Sum
   return response.json();
 }
 
-// Fetch inactive devices (grouped by device)
+// Fetch inactive devices (returns raw records, will be grouped in the hook)
 export async function fetchInactiveDevices(
   date: string,
   options?: { platform?: string; device_id?: string; limit?: number }
 ): Promise<InactiveDevicesResponse> {
-  const url = new URL(`${API_BASE_URL}/inactive-devices/${date}`);
-  if (options?.platform) url.searchParams.set('platform', options.platform);
-  if (options?.device_id) url.searchParams.set('device_id', options.device_id);
-  if (options?.limit) url.searchParams.set('limit', options.limit.toString());
-  
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(`Failed to fetch inactive devices: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-// Fetch raw inactive records
-export async function fetchInactiveRecords(
-  date: string,
-  options?: { platform?: string; device_id?: string }
-): Promise<InactiveRecordsResponse> {
   const url = new URL(`${API_BASE_URL}/inactive/${date}`);
   if (options?.platform) url.searchParams.set('platform', options.platform);
   if (options?.device_id) url.searchParams.set('device_id', options.device_id);
-  
+  if (options?.limit) url.searchParams.set('limit', options.limit.toString());
+
   const response = await fetch(url.toString());
   if (!response.ok) {
-    throw new Error(`Failed to fetch inactive records: ${response.statusText}`);
+    throw new Error(`Failed to fetch inactive devices: ${response.statusText}`);
   }
   return response.json();
 }
@@ -116,7 +101,7 @@ export async function fetchNoAppFound(
   const url = new URL(`${API_BASE_URL}/no-app-found/${date}`);
   if (options?.platform) url.searchParams.set('platform', options.platform);
   if (options?.device_id) url.searchParams.set('device_id', options.device_id);
-  
+
   const response = await fetch(url.toString());
   if (!response.ok) {
     throw new Error(`Failed to fetch no app found devices: ${response.statusText}`);
@@ -150,26 +135,38 @@ export async function fetchDeviceHistoryByDate(
 // Helper functions
 export function getTotalCounts(summary: SummaryItem[]) {
   return {
-    active: summary.filter(s => s.account_status === 'active').reduce((acc, s) => acc + s.count, 0),
-    inactive: summary.filter(s => s.account_status === 'inactive').reduce((acc, s) => acc + s.count, 0),
-    error: summary.filter(s => s.account_status === 'error').reduce((acc, s) => acc + s.count, 0),
+    active: summary.reduce((acc, s) => acc + s.active, 0),
+    inactive: summary.reduce((acc, s) => acc + s.inactive, 0),
+    error: summary.reduce((acc, s) => acc + (s.error || 0), 0),
   };
 }
 
 export function getPlatformData(summary: SummaryItem[]) {
-  const platformMap = new Map<string, { active: number; inactive: number; error: number }>();
-  
-  summary.forEach(item => {
-    if (!platformMap.has(item.platform)) {
-      platformMap.set(item.platform, { active: 0, inactive: 0, error: 0 });
+  return summary.map(item => ({
+    platform: item.platform.charAt(0).toUpperCase() + item.platform.slice(1),
+    active: item.active,
+    inactive: item.inactive,
+    error: item.error || 0,
+    total: item.active + item.inactive + (item.error || 0),
+  }));
+}
+
+// Transform raw device records into grouped devices by device_id
+export function groupDeviceRecords(records: DeviceRecord[]): InactiveDevice[] {
+  const deviceMap = new Map<string, { platforms: Set<string>; count: number }>();
+
+  records.forEach(record => {
+    if (!deviceMap.has(record.device_id)) {
+      deviceMap.set(record.device_id, { platforms: new Set(), count: 0 });
     }
-    const data = platformMap.get(item.platform)!;
-    data[item.account_status] = item.count;
+    const device = deviceMap.get(record.device_id)!;
+    device.platforms.add(record.platform);
+    device.count++;
   });
-  
-  return Array.from(platformMap.entries()).map(([platform, counts]) => ({
-    platform: platform.charAt(0).toUpperCase() + platform.slice(1),
-    ...counts,
-    total: counts.active + counts.inactive + counts.error,
+
+  return Array.from(deviceMap.entries()).map(([device_id, data]) => ({
+    device_id,
+    inactive_count: data.count,
+    platforms: Array.from(data.platforms),
   }));
 }
