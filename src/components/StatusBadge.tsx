@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { AccountStatus } from "@/lib/api";
 
 interface StatusBadgeProps {
-  status: AccountStatus;
+  status: AccountStatus | '' | undefined;
   className?: string;
 }
 
@@ -22,10 +22,16 @@ const statusConfig = {
     className: 'bg-destructive/10 text-destructive border-destructive/20',
     dotClassName: 'bg-destructive',
   },
+  unknown: {
+    label: 'Unknown',
+    className: 'bg-muted/10 text-muted-foreground border-muted/20',
+    dotClassName: 'bg-muted-foreground',
+  },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const normalizedStatus = status && status in statusConfig ? status : 'unknown';
+  const config = statusConfig[normalizedStatus as keyof typeof statusConfig];
   
   return (
     <span
