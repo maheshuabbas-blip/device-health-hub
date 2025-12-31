@@ -85,7 +85,7 @@ export function DeviceDetailModal({ deviceId, open, onOpenChange }: DeviceDetail
                         className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/50"
                       >
                         <div className="flex items-center gap-3">
-                          <PlatformIcon platform={record.platform} />
+                          <PlatformIcon platform={record.platform} showTooltip={true} />
                           <div>
                             <p className="font-medium capitalize">{record.platform}</p>
                             {record.reason && (
